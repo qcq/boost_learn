@@ -49,20 +49,49 @@ class work_queue {
 
         task_type pop_task() {
             std::unique_lock<std::mutex> lock(tasks_mutex_);
-            if (!tasks_.empty()) {
-                ret = tasks_.front();
-                tasks_.pop_front();
+            while (tasks_.empty()) {
+                cond_.wait(lock);
             }
+            task_type ret = tasks_.front();
+            tasks_.pop_front();
             return ret;
         }
 };
 
-int main(){
+work_queue g_queue;
 
-    boost::thread t1(&do_inc);
-    boost::thread t2(&do_dec);
-    std::cout << shared_i << std::endl;
-    t1.join();
-    t2.join();
+void do_nothing(){
+    std::cout << "hello world" << std::endl;
+}
+
+const std::size_t tests_tasks_count = 3000;
+
+void pusher() {
+    for(std::size_t i = 0; i < tests_tasks_count; ++i) {
+        g_queue.push_task(&do_nothing);
+    }
+}
+
+void popper_sync() {
+    for (std::size_t i = 0; i < tests_tasks_count; ++i) {
+        g_queue.pop_task()();
+    }
+}
+
+int main(){
+    boost::thread pop_sync1(&popper_sync);
+    boost::thread pop_sync2(&popper_sync);
+    boost::thread pop_sync3(&popper_sync);
+    
+    boost::thread push1(&pusher);
+    boost::thread push2(&pusher);
+    boost::thread push3(&pusher);
+    pop_sync1.join();
+    pop_sync2.join();
+    pop_sync3.join();
+
+    push1.join();
+    push2.join();
+    push3.join();
     return 0;
 }
